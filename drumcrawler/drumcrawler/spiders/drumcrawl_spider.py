@@ -3,7 +3,10 @@ from scrapy.http import Request
 
 username = "zxc8520wer"
 password = "aabb1122"
-search_keyword = "kick"
+SEARCH_KEYWORD = "kick"
+LIMIT_SIZE = 5*(2**20) # 5MB
+LIMIT_COUNT = 100
+CURRENT_COUNT = 0
 
 class drumcrawlSpider( scrapy.Spider ) :
 	name = "drumcrawl"
@@ -22,11 +25,13 @@ class drumcrawlSpider( scrapy.Spider ) :
 	def parse(self, response):
 		responsebody = response.body_as_unicode()
 
+		# 로그인 검사
 		if 'correct' in responsebody:
 			self.logger.error('Login failed.')
 			return
-		for i in range(1,2):
-			yield Request(url="https://freesound.org/search/?q=" + search_keyword + "&page=" + str(i) + "#sound", callback=self.get_sound_page_url)
+
+		for i in range(1,50):
+			yield Request(url="https://freesound.org/search/?q=" + SEARCH_KEYWORD + "&page=" + str(i) + "#sound", callback=self.get_sound_page_url)
 		
 	#다운로드 페이지 url
 	def get_sound_page_url(self, response):
@@ -37,12 +42,38 @@ class drumcrawlSpider( scrapy.Spider ) :
 	#다운로드 링크 url
 	def get_download_url(self, response):
 		download_url = response.css('#download_button').xpath('@href').extract()[0]
-		yield Request(url='https://freesound.org' + download_url, callback=self.save_file)
+
+		# method 파라미터를 HEAD로 입력해서 파일 용량을 미리 알 수 있게 요청
+		yield Request(url='https://freesound.org' + download_url, method="HEAD", callback=self.file_filter)
+
+	#파일 필터링
+	#용량, 확장자
+	def file_filter(self, response):
+		global CURRENT_COUNT
+		content_length = response.headers['content-length'].decode()
+		# print ('name: ' + response.url + ' length: ' + content_length)
+
+		# 용량
+		if int(content_length) > LIMIT_SIZE:
+			return
+
+		# 확장자
+		file_name = response.url.split('/')[-1]
+		if '.mp3' not in file_name :
+			if '.wav' not in file_name :
+				return
+		# 100개만 다운로드
+		if CURRENT_COUNT >= LIMIT_COUNT :
+			return
+
+		CURRENT_COUNT += 1
+		# print ('CURRENT_COUNT: ' + str(CURRENT_COUNT))
+
+		# 실제 파일 다운로드 요청
+		yield Request(url=response.url, callback=self.save_file)
 
 	#파일 저장	
 	def save_file(self, response):
 		path = response.url.split('/')[-1]
-		print (response.headers)
 		with open(path, "wb") as f:
 			f.write(response.body)
-
