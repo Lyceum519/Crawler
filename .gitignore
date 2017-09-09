@@ -104,7 +104,7 @@ venv.bak/
 .mypy_cache/
 
 # wav , mp3 data
-.mp3
-.wav
+*.mp3
+*.wav
 
 # End of https://www.gitignore.io/api/python
